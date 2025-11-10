@@ -420,7 +420,6 @@
                 padding: 8px;
             }
 
-            .keywords-section,
             .example-answer-section {
                 max-height: 250px;
                 padding: 20px;
@@ -430,7 +429,6 @@
                 font-size: 1.1rem;
             }
 
-            .keywords-content,
             .example-answer-content {
                 font-size: 1rem;
             }
@@ -974,7 +972,24 @@
         function loadBookmarks() {
             const saved = localStorage.getItem('bookmarkedQuestions');
             if (saved) {
-                bookmarkedQuestions = JSON.parse(saved);
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 북마크 데이터 형식 검증
+                    if (Array.isArray(parsed)) {
+                        bookmarkedQuestions = parsed.filter(bookmark => 
+                            bookmark && 
+                            typeof bookmark.setId === 'string' && 
+                            typeof bookmark.questionId === 'string'
+                        );
+                    } else {
+                        bookmarkedQuestions = [];
+                    }
+                } catch (e) {
+                    console.error('북마크 데이터 로드 실패:', e);
+                    bookmarkedQuestions = [];
+                }
+            } else {
+                bookmarkedQuestions = [];
             }
         }
 
@@ -1010,20 +1025,44 @@
             let currentSet, currentQuestion;
 
             if (currentMode === "bookmark" && bookmarkedQuestions.length > 0) {
+                if (currentSetIndex >= bookmarkedQuestions.length) {
+                    currentSetIndex = 0;
+                }
                 const bookmark = bookmarkedQuestions[currentSetIndex];
+                if (!bookmark) {
+                    questionElement.textContent = "문제를 찾을 수 없습니다.";
+                    return;
+                }
                 currentSet = questionSets.find(set => set.id === bookmark.setId);
-                currentQuestion = currentSet ? currentSet.questions.find(q => q.id === bookmark.questionId) : null;
+                if (!currentSet) {
+                    questionElement.textContent = "문제를 찾을 수 없습니다.";
+                    return;
+                }
+                currentQuestion = currentSet.questions.find(q => q.id === bookmark.questionId);
+                if (!currentQuestion) {
+                    questionElement.textContent = "문제를 찾을 수 없습니다.";
+                    return;
+                }
             } else if (currentMode === "sequential" || currentMode === "reverse") {
                 if (!flatOrder || flatOrder.length === 0) {
                     flatOrder = buildFlatOrder();
                     flatOrder.sort((a, b) => a.sortKey - b.sortKey);
                     if (currentMode === "reverse") flatOrder.reverse();
                 }
+                if (currentFlatIndex >= flatOrder.length) {
+                    currentFlatIndex = 0;
+                }
                 const flatItem = flatOrder[currentFlatIndex];
                 currentSet = questionSets[flatItem.setIndex];
                 currentQuestion = currentSet.questions[flatItem.questionIndex];
             } else {
+                if (currentSetIndex >= setOrder.length) {
+                    currentSetIndex = 0;
+                }
                 currentSet = questionSets[setOrder[currentSetIndex]];
+                if (currentQuestionIndex >= currentSet.questions.length) {
+                    currentQuestionIndex = 0;
+                }
                 currentQuestion = currentSet.questions[currentQuestionIndex];
             }
 
@@ -1042,20 +1081,27 @@
             if (exampleAnswerContent) exampleAnswerContent.textContent = currentQuestion.answer;
             if (intentContent) intentContent.textContent = currentQuestion.interviewIntent || '';
 
-            // 북마크 상태
-            const isBookmarked = bookmarkedQuestions.some(
-                bookmark => bookmark.setId === currentSet.id && bookmark.questionId === currentQuestion.id
-            );
-            if (bookmarkButton) {
+            // 북마크 상태 - 현재 질문이 북마크되어 있는지 정확히 확인
+            if (currentSet && currentQuestion && bookmarkButton) {
+                // 북마크 버튼의 active 클래스를 먼저 제거
+                bookmarkButton.classList.remove('active');
+                
+                // 현재 질문이 북마크되어 있는지 확인
+                const currentSetId = currentSet.id;
+                const currentQuestionId = currentQuestion.id;
+                
+                const isBookmarked = bookmarkedQuestions.some(
+                    bookmark => {
+                        return bookmark.setId === currentSetId && bookmark.questionId === currentQuestionId;
+                    }
+                );
+                
                 if (isBookmarked) {
                     bookmarkButton.classList.add('active');
-                } else {
-                    bookmarkButton.classList.remove('active');
                 }
             }
 
             // 답변 섹션 숨기기
-            if (keywordsSection) keywordsSection.classList.add('hidden');
             if (exampleAnswerSection) exampleAnswerSection.classList.add('hidden');
             if (intentSection) intentSection.classList.add('hidden');
         }
@@ -1102,31 +1148,70 @@
         function toggleBookmark() {
             let currentSet, currentQuestion;
             if (currentMode === "bookmark" && bookmarkedQuestions.length > 0) {
+                if (currentSetIndex >= bookmarkedQuestions.length) {
+                    currentSetIndex = 0;
+                }
                 const bookmark = bookmarkedQuestions[currentSetIndex];
+                if (!bookmark) return;
                 currentSet = questionSets.find(set => set.id === bookmark.setId);
+                if (!currentSet) return;
                 currentQuestion = currentSet.questions.find(q => q.id === bookmark.questionId);
+                if (!currentQuestion) return;
             } else if (currentMode === "sequential" || currentMode === "reverse") {
+                if (!flatOrder || flatOrder.length === 0) {
+                    flatOrder = buildFlatOrder();
+                    flatOrder.sort((a, b) => a.sortKey - b.sortKey);
+                    if (currentMode === "reverse") flatOrder.reverse();
+                }
+                if (currentFlatIndex >= flatOrder.length) {
+                    currentFlatIndex = 0;
+                }
                 const entry = flatOrder[currentFlatIndex];
                 currentSet = questionSets[entry.setIndex];
                 currentQuestion = currentSet.questions[entry.questionIndex];
             } else {
+                if (currentSetIndex >= setOrder.length) {
+                    currentSetIndex = 0;
+                }
                 currentSet = questionSets[setOrder[currentSetIndex]];
+                if (currentQuestionIndex >= currentSet.questions.length) {
+                    currentQuestionIndex = 0;
+                }
                 currentQuestion = currentSet.questions[currentQuestionIndex];
             }
 
+            if (!currentSet || !currentQuestion) return;
+
+            // 현재 질문의 ID를 명확하게 저장
+            const currentSetId = currentSet.id;
+            const currentQuestionId = currentQuestion.id;
+
             const bookmarkIndex = bookmarkedQuestions.findIndex(
-                bookmark => bookmark.setId === currentSet.id && bookmark.questionId === currentQuestion.id
+                bookmark => {
+                    return bookmark.setId === currentSetId && bookmark.questionId === currentQuestionId;
+                }
             );
 
             if (bookmarkIndex === -1) {
-                bookmarkedQuestions.push({ setId: currentSet.id, questionId: currentQuestion.id });
-                if (bookmarkButton) bookmarkButton.classList.add('active');
+                // 북마크 추가
+                bookmarkedQuestions.push({ 
+                    setId: currentSetId, 
+                    questionId: currentQuestionId 
+                });
+                if (bookmarkButton) {
+                    bookmarkButton.classList.add('active');
+                }
             } else {
+                // 북마크 제거
                 bookmarkedQuestions.splice(bookmarkIndex, 1);
-                if (bookmarkButton) bookmarkButton.classList.remove('active');
+                if (bookmarkButton) {
+                    bookmarkButton.classList.remove('active');
+                }
                 if (currentMode === "bookmark") {
                     if (bookmarkedQuestions.length === 0) {
                         alert("북마크한 문제가 없습니다. 번호순 모드로 전환합니다.");
+                        tabs.forEach(t => t.classList.remove('active'));
+                        tabs[0].classList.add('active');
                         setMode("sequential");
                         return;
                     }
@@ -1251,25 +1336,16 @@
         addTouchEvents(bookmarkButton, toggleBookmark);
 
         // 답변 탭
-        const handleKeywordsTab = () => {
-            if (keywordsSection) keywordsSection.classList.toggle('hidden');
-            if (exampleAnswerSection) exampleAnswerSection.classList.add('hidden');
-            if (intentSection) intentSection.classList.add('hidden');
-        };
-
         const handleExampleTab = () => {
             if (exampleAnswerSection) exampleAnswerSection.classList.toggle('hidden');
-            if (keywordsSection) keywordsSection.classList.add('hidden');
             if (intentSection) intentSection.classList.add('hidden');
         };
 
         const handleIntentTab = () => {
             if (intentSection) intentSection.classList.toggle('hidden');
-            if (keywordsSection) keywordsSection.classList.add('hidden');
             if (exampleAnswerSection) exampleAnswerSection.classList.add('hidden');
         };
 
-        addTouchEvents(keywordsTab, handleKeywordsTab);
         addTouchEvents(exampleTab, handleExampleTab);
         addTouchEvents(intentTab, handleIntentTab);
 
