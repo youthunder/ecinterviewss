@@ -1077,8 +1077,7 @@
 
             // 문제 표시
             questionElement.textContent = questionNumber + currentQuestion.text;
-            if (keywordsContent) keywordsContent.textContent = currentQuestion.keywords;
-            if (exampleAnswerContent) exampleAnswerContent.textContent = currentQuestion.answer;
+            if (exampleAnswerContent) exampleAnswerContent.textContent = currentQuestion.answer || '';
             if (intentContent) intentContent.textContent = currentQuestion.interviewIntent || '';
 
             // 북마크 상태 - 현재 질문이 북마크되어 있는지 정확히 확인
@@ -1101,9 +1100,7 @@
                 }
             }
 
-            // 답변 섹션 숨기기
-            if (exampleAnswerSection) exampleAnswerSection.classList.add('hidden');
-            if (intentSection) intentSection.classList.add('hidden');
+            // 답변 섹션은 사용자가 직접 탭 버튼으로 열고 닫을 수 있도록 자동으로 숨기지 않음
         }
 
         // 모드 설정
@@ -1336,18 +1333,42 @@
         addTouchEvents(bookmarkButton, toggleBookmark);
 
         // 답변 탭
-        const handleExampleTab = () => {
-            if (exampleAnswerSection) exampleAnswerSection.classList.toggle('hidden');
-            if (intentSection) intentSection.classList.add('hidden');
+        const handleExampleTab = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (exampleAnswerSection) {
+                // 다른 섹션은 숨기고
+                if (intentSection) intentSection.classList.add('hidden');
+                // 예시 답안 섹션은 토글
+                exampleAnswerSection.classList.toggle('hidden');
+            }
         };
 
-        const handleIntentTab = () => {
-            if (intentSection) intentSection.classList.toggle('hidden');
-            if (exampleAnswerSection) exampleAnswerSection.classList.add('hidden');
+        const handleIntentTab = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (intentSection) {
+                // 다른 섹션은 숨기고
+                if (exampleAnswerSection) exampleAnswerSection.classList.add('hidden');
+                // 질문 의도 섹션은 토글
+                intentSection.classList.toggle('hidden');
+            }
         };
 
-        addTouchEvents(exampleTab, handleExampleTab);
-        addTouchEvents(intentTab, handleIntentTab);
+        if (exampleTab) {
+            exampleTab.addEventListener('click', handleExampleTab);
+            exampleTab.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                handleExampleTab(e);
+            });
+        }
+        if (intentTab) {
+            intentTab.addEventListener('click', handleIntentTab);
+            intentTab.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                handleIntentTab(e);
+            });
+        }
 
         // 타이머 버튼
         addTouchEvents(startTimerButton, startTimer);
