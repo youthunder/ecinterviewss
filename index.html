@@ -976,11 +976,30 @@
                     const parsed = JSON.parse(saved);
                     // 북마크 데이터 형식 검증
                     if (Array.isArray(parsed)) {
-                        bookmarkedQuestions = parsed.filter(bookmark => 
-                            bookmark && 
-                            typeof bookmark.setId === 'string' && 
-                            typeof bookmark.questionId === 'string'
-                        );
+                        // questionSets가 정의되어 있는지 확인
+                        if (questionSets && questionSets.length > 0) {
+                            bookmarkedQuestions = parsed.filter(bookmark => {
+                                if (!bookmark || typeof bookmark.setId !== 'string' || typeof bookmark.questionId !== 'string') {
+                                    return false;
+                                }
+                                // 실제로 존재하는 문제인지 확인
+                                const set = questionSets.find(s => s && s.id === bookmark.setId);
+                                if (!set) return false;
+                                const question = set.questions && set.questions.find(q => q && q.id === bookmark.questionId);
+                                return !!question;
+                            });
+                            // 유효하지 않은 북마크가 제거되었으면 저장
+                            if (bookmarkedQuestions.length !== parsed.length) {
+                                saveBookmarks();
+                            }
+                        } else {
+                            // questionSets가 아직 정의되지 않았으면 일단 저장만 하고 나중에 검증
+                            bookmarkedQuestions = parsed.filter(bookmark => 
+                                bookmark && 
+                                typeof bookmark.setId === 'string' && 
+                                typeof bookmark.questionId === 'string'
+                            );
+                        }
                     } else {
                         bookmarkedQuestions = [];
                     }
@@ -1025,20 +1044,21 @@
             let currentSet, currentQuestion;
 
             if (currentMode === "bookmark" && bookmarkedQuestions.length > 0) {
-                if (currentSetIndex >= bookmarkedQuestions.length) {
+                // currentSetIndex가 범위를 벗어나면 0으로 초기화
+                if (currentSetIndex < 0 || currentSetIndex >= bookmarkedQuestions.length) {
                     currentSetIndex = 0;
                 }
                 const bookmark = bookmarkedQuestions[currentSetIndex];
-                if (!bookmark) {
-                    questionElement.textContent = "문제를 찾을 수 없습니다.";
+                if (!bookmark || !bookmark.setId || !bookmark.questionId) {
+                    questionElement.textContent = "북마크 데이터가 유효하지 않습니다.";
                     return;
                 }
-                currentSet = questionSets.find(set => set.id === bookmark.setId);
+                currentSet = questionSets.find(set => set && set.id === bookmark.setId);
                 if (!currentSet) {
-                    questionElement.textContent = "문제를 찾을 수 없습니다.";
+                    questionElement.textContent = "문제 세트를 찾을 수 없습니다.";
                     return;
                 }
-                currentQuestion = currentSet.questions.find(q => q.id === bookmark.questionId);
+                currentQuestion = currentSet.questions.find(q => q && q.id === bookmark.questionId);
                 if (!currentQuestion) {
                     questionElement.textContent = "문제를 찾을 수 없습니다.";
                     return;
@@ -1128,6 +1148,16 @@
                     currentQuestionIndex = 0;
                     break;
                 case "bookmark":
+                    // 북마크 데이터 유효성 재검증
+                    bookmarkedQuestions = bookmarkedQuestions.filter(bookmark => {
+                        if (!bookmark || typeof bookmark.setId !== 'string' || typeof bookmark.questionId !== 'string') {
+                            return false;
+                        }
+                        const set = questionSets.find(s => s && s.id === bookmark.setId);
+                        if (!set) return false;
+                        const question = set.questions.find(q => q && q.id === bookmark.questionId);
+                        return !!question;
+                    });
                     if (bookmarkedQuestions.length === 0) {
                         alert("북마크한 문제가 없습니다. 먼저 문제를 북마크해주세요.");
                         tabs.forEach(t => t.classList.remove('active'));
@@ -1135,6 +1165,8 @@
                         setMode("sequential");
                         return;
                     }
+                    // 유효하지 않은 북마크가 제거되었으면 저장
+                    saveBookmarks();
                     currentSetIndex = 0;
                     break;
             }
@@ -1145,14 +1177,15 @@
         function toggleBookmark() {
             let currentSet, currentQuestion;
             if (currentMode === "bookmark" && bookmarkedQuestions.length > 0) {
-                if (currentSetIndex >= bookmarkedQuestions.length) {
+                // currentSetIndex가 범위를 벗어나면 0으로 초기화
+                if (currentSetIndex < 0 || currentSetIndex >= bookmarkedQuestions.length) {
                     currentSetIndex = 0;
                 }
                 const bookmark = bookmarkedQuestions[currentSetIndex];
-                if (!bookmark) return;
-                currentSet = questionSets.find(set => set.id === bookmark.setId);
+                if (!bookmark || !bookmark.setId || !bookmark.questionId) return;
+                currentSet = questionSets.find(set => set && set.id === bookmark.setId);
                 if (!currentSet) return;
-                currentQuestion = currentSet.questions.find(q => q.id === bookmark.questionId);
+                currentQuestion = currentSet.questions && currentSet.questions.find(q => q && q.id === bookmark.questionId);
                 if (!currentQuestion) return;
             } else if (currentMode === "sequential" || currentMode === "reverse") {
                 if (!flatOrder || flatOrder.length === 0) {
@@ -1160,18 +1193,21 @@
                     flatOrder.sort((a, b) => a.sortKey - b.sortKey);
                     if (currentMode === "reverse") flatOrder.reverse();
                 }
-                if (currentFlatIndex >= flatOrder.length) {
+                if (currentFlatIndex < 0 || currentFlatIndex >= flatOrder.length) {
                     currentFlatIndex = 0;
                 }
                 const entry = flatOrder[currentFlatIndex];
+                if (!entry) return;
                 currentSet = questionSets[entry.setIndex];
+                if (!currentSet || !currentSet.questions) return;
                 currentQuestion = currentSet.questions[entry.questionIndex];
             } else {
-                if (currentSetIndex >= setOrder.length) {
+                if (currentSetIndex < 0 || currentSetIndex >= setOrder.length) {
                     currentSetIndex = 0;
                 }
                 currentSet = questionSets[setOrder[currentSetIndex]];
-                if (currentQuestionIndex >= currentSet.questions.length) {
+                if (!currentSet || !currentSet.questions) return;
+                if (currentQuestionIndex < 0 || currentQuestionIndex >= currentSet.questions.length) {
                     currentQuestionIndex = 0;
                 }
                 currentQuestion = currentSet.questions[currentQuestionIndex];
